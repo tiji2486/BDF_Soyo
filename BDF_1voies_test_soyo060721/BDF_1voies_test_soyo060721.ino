@@ -1,18 +1,18 @@
 //Wattmètre 1 voies, transmet sur le port serie la valeur du bucket pour 
-// calculer la puissance du BDF à transmettre par voie Modbus a l'inverter SoyoSource
-//  Tests et programme effectués à partir des travaux sur le Bruit de fond (Tignous) et le Wattmètre 4 voies ou le PVBATNOCT
+// calculer la puissance ( en watts) du Bruit de fonds à transmettre  a l'inverter SoyoSource
+//  Tests et programme effectués à partir des travaux sur le Bruit de fond (Tignous), le Wattmètre 4 voies ou le PVBATNOCT
 #define POSITIVE 1
 #define NEGATIVE 0
-#define ON 1  // commande positive du MOS de Commande du chargeur
+#define ON 1  
 #define OFF 0
-byte LEDBAT = 9; // pin 15 micro commande LED rouge
-String ledbat_onoff;
+byte LEDBAT = 9; // pas utile ici
+String ledbat_onoff; // pas utile ici
 byte voltageSensorPin = A3;// pin 26
 byte currentSensor1Pin = A5; // pin 28
 
 float SommeP1 = 0; //somme de P1 sur N periodes
 
-int residuel = 10 ; //  soutirage résiduel en Watt
+int residuel = 10 ; //  soutirage résiduel en Watt (puissance consommée minimum)
 float Plissee1 = 0;
 
 long cycleCount = 0;
@@ -30,14 +30,14 @@ boolean beyondStartUpPhase = false;
 
 int capacityOfEnergyBucket = 1000;
 
-int sampleV, sampleI1; //,sampleI2,sampleI3,sampleI4 ;   // Les valeurs de tension et courants sont des entiers dans l'espace 0 ...1023
+int sampleV, sampleI1;   // Les valeurs de tension et courants sont des entiers dans l'espace 0 ...1023
 int lastSampleV;     // valeur à la boucle précédente.
 float lastFilteredV, filteredV; //  tension après filtrage pour retirer la composante continue
 
 float prevDCoffset;          // <<--- pour filtre passe bas
 float DCoffset;              // <<--- idem
 float cumVdeltasThisCycle;   // <<--- idem
-float sampleVminusDC;         // <<--- idem float sampleI1minusDC;         // <<--- idem
+float sampleVminusDC;         // <<--- idem        
 float sampleI1minusDC;         // <<--- idem
 
 float lastSampleVminusDC;     // <<--- idem
@@ -48,22 +48,16 @@ float PowerCal1;  // pour conversion des valeur brutes V et I en joules.
 float VOLTAGECAL; // Pour determiner la tension mini de déclenchement du triac.
 
 boolean firstLoopOfHalfCycle;
-
+//******************************************************************************
 void setup()
 {
-  Serial.begin(500000); // pour tests
-  //Serial.println("Prod_Effisol  Conso  Prod_SMA  Prod_total  Bucket" );
-
-
+  Serial.begin(500000); // pour test
   PowerCal1 = 0.2185 ;  //  Calibration du gain de chaque voie
   VOLTAGECAL = (float)679 / 471; // En volts par pas d'ADC.
-
   PHASECAL = 1 ;       // NON CRITIQUE
-
-  sumP1 = 0 ;
-  
+  sumP1 = 0 ;  
 }
-
+//******************************************************************************
 
 void loop() 
 {
@@ -92,10 +86,13 @@ void loop()
   byte polarityOfLastReading = polarityNow;
   
   if (filteredV >= 0)
+  {
     polarityNow = POSITIVE;
+  }
   else
+  {
     polarityNow = NEGATIVE;
-
+  }
   if (polarityNow == POSITIVE)
   {
     if (polarityOfLastReading != POSITIVE)
@@ -121,7 +118,7 @@ void loop()
         //xxxxxxxxxxxxxxxxDEPARTxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
       {
-        energyInBucket += realEnergy;//Plissee1;//realEnergy  ;  // intégrateur pour régulation
+        energyInBucket += realEnergy;  // intégrateur pour régulation (bucket à envoyer a l'onduleur)
 
         // Reduction d'énergie dans le reservoir d'une quantité "safety margin"
         // Ceci permet au système un décalage pour plus d'injection ou + de soutirage
@@ -147,21 +144,27 @@ void loop()
         firingDelayInMicros =  2000;//99999;
       }
       else
-        // fire immediately if energy level is above upper threshold (full power)
+        // tire immédiatement si le niveau d'énergie est supérieur au seuil supérieur (pleine puissance)
         if (energyInBucket >= 1000) {
           firingDelayInMicros = 0;
         }
         else
-          // determine the appropriate firing point for the bucket's level
-          // by using either of the following algorithms
+          
+          // *******Essayer les deux algorithmes pour une meilleur réponse du Bucket******************
+          
+          // détermine le point de tir approprié pour le niveau du Bucket
+           // en utilisant l'un des algorithmes suivants
         {
-          // simple algorithm (with non-linear power response across the energy range)
+         //********** algorithme simple (avec réponse en puissance non linéaire sur toute la plage d'énergie)**********
           //        firingDelayInMicros = 10 * (2300 - energyInBucket);
-          // complex algorithm which reflects the non-linear nature of phase-angle control.
+          
+          //*********** algorithme complexe qui reflète la nature non linéaire du contrôle d'angle de phase.***********
           firingDelayInMicros = (asin((-1 * (energyInBucket - 500) / 500)) + (PI / 2)) * (10000 / PI);
-          // Suppress firing at low energy levels to avoid complications with
-          // logic near the end of each half-cycle of the mains.
-          // This cut-off affects approximately the bottom 5% of the energy range.
+         //***********************************************************************************************************
+          
+          // Supprimer le tir à des niveaux d'énergie faibles pour éviter les complications avec
+           // logique vers la fin de chaque demi-cycle du secteur.
+           // Cette coupure affecte approximativement les 5 % inférieurs de la plage d'énergie.
           if (firingDelayInMicros > 5000) {
             firingDelayInMicros = 1000; // never fire
           }
@@ -178,14 +181,15 @@ void loop()
         {
           // Toutes les N périodes
           
-          Plissee1 = SommeP1 / (10) ;       
-
+          Plissee1 = SommeP1 / (10) ;     
+          
+          //*********Envoi sur le port serie le bucket pour l'onduleur******************
           Serial.print ("  ");       
           Serial.print ((energyInBucket), 0);
           Serial.print ("\t");
           Serial.println ('\0'); // fin de string '0' très important pour Wifi !
 
-
+          //****************************************************************************
           cptperiodes = 0;
           SommeP1 = 0;
           Plissee1 = 0;
