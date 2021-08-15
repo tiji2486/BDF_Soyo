@@ -1,3 +1,6 @@
+// Esp8266 ou Wemos D1
+// communication et décodage trames Modbus pour Onduleur Soyo Sources, 
+
 //IP 192.168.0.51  OTA
 //#include <SPI.h>
 #include <ESP8266WiFi.h>
@@ -9,11 +12,11 @@
 //*********************modbus**********************
 #define RE D2
 #define DE D3
-int conso2 ;
+int conso ;
 int Buffer[16];
 byte ReadCommand[] = { 0x24, 0x56 , 0x00 , 0x21 , 0x00 , 0x00 , 0x80 , 0x08};
-byte bit4 ;//= conso2 * 256;//variable conso
-byte bit5 ;//= bit4+conso2/256 ;// variable conso   var w = b4 + b5;
+byte bit4 ;//variable conso
+byte bit5 ;//= bit4+conso/256 
 byte bit7; //= (264-bit4)-bit5;//CRC (264 - bit4 - bit5)= bit7
 //*****************************************************************
 char ssid[] = "000000000";           // SSID of your home WiFi
@@ -23,8 +26,8 @@ String (Bucket);
 String Mesures;
 String inputString = "";
 String readmodbus ;
-int capacityOfEnergyBucket = 1000;//1500 ;
-int residuel = 30;
+int capacityOfEnergyBucket = 1000; // Capacité du réservoir 
+int residuel = 30; // a modifier pour + ou - de conso active résiduel.
 float realEnergy;
 float energyInBucket = 0;
 float cyclesPerSecond = 10;
@@ -82,6 +85,7 @@ void loop ()
   clientIP_esp8266 ();
   ModbusInOut ();
   bucketenergy ();
+  pagehttp ();
 }
 //****************Fin Loop ****************************************
 //*****************************Fonctions*****************************
@@ -202,3 +206,35 @@ void bucketenergy ()
         }
 }
 //**********************************************
+// affichage sur simple page web des données...
+void pagehttp ()
+{
+ int wattbatt = conso;
+  // "<head>  <title>ESP8266 / ESP32</title> <meta http-equiv=Refresh content=2></head> "
+  //***************************************
+  WiFiClient client = server.available();   // Listen for incoming clients
+  if (client)  //xxx If a new client connects,
+  {
+    while (client.connected())
+    {
+      if (client.available())
+      {
+        client.println("HTTP/1.0 200 OK \r\n\n");
+        client.println("<!DOCTYPE html>");
+        client.println("<html lang=fr>");// page WEB elementaire
+        client.println("<meta charset= utf-8 />");
+        client.println("<html>");
+        client.print("<body>");
+        client.print (Mesures + String(energyInBucket) +'\0');
+        client.print(" <h1 style=color:blue>Conso (Conso) : " + conso + "</h1> ");  
+        client.print(" <h1 style=color:blue>bucket : " + String(energyInBucket) + "</h1> ");
+        client.print(" <h1 style=color:blue>Batterie Watts :" + String(wattbatt) + "</h1> ");
+        client.print("<meta http-equiv=Refresh content=1>");        //relance toutes les 1 secondes la page html
+        client.print("</body></html>");
+
+        break;
+      }
+    }
+  }
+}
+
