@@ -152,7 +152,7 @@ void loop()
           
           // *******Essayer les deux algorithmes pour une meilleur réponse du Bucket******************
           
-          // détermine le point de tir approprié pour le niveau du Bucket
+          // détermine le point  approprié pour le niveau du Bucket
            // en utilisant l'un des algorithmes suivants
         {
          //********** algorithme simple (avec réponse en puissance non linéaire sur toute la plage d'énergie)**********
@@ -162,11 +162,11 @@ void loop()
           firingDelayInMicros = (asin((-1 * (energyInBucket - 500) / 500)) + (PI / 2)) * (10000 / PI);
          //***********************************************************************************************************
           
-          // Supprimer le tir à des niveaux d'énergie faibles pour éviter les complications avec
+          // Supprimer le point à des niveaux d'énergie faibles pour éviter les complications avec
            // logique vers la fin de chaque demi-cycle du secteur.
            // Cette coupure affecte approximativement les 5 % inférieurs de la plage d'énergie.
           if (firingDelayInMicros > 5000) {
-            firingDelayInMicros = 1000; // never fire
+            firingDelayInMicros = 1000; 
           }
         }
       //**********************************************
@@ -176,7 +176,7 @@ void loop()
 
        (SommeP1 += realPower1);//P1moy lissée
        
-        //modifier /10 pour une mesures moins rapide augmenter
+       //***********modifier " /(10) ",  pour une mesures moins rapide augmenter
         if (cptperiodes == 10) // toutes les secondes en debut de sinus envoi datas
         {
           // Toutes les N périodes
