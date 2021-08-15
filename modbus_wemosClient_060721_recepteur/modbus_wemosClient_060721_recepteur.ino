@@ -19,10 +19,19 @@ byte bit7; //= (264-bit4)-bit5;//CRC (264 - bit4 - bit5)= bit7
 char ssid[] = "000000000";           // SSID of your home WiFi
 char pass[] = "00000000000";// password of your home WiFi
 
-String (bucket);
+String (Bucket);
+String Mesures;
 String inputString = "";
 String readmodbus ;
+int capacityOfEnergyBucket = 1000;//1500 ;
+int residuel = 30;
+float realEnergy;
+float energyInBucket = 0;
+float cyclesPerSecond = 10;
+unsigned long firingDelayInMicros;
+
 char DataRead ;
+
 IPAddress server1(192, 168, 0, 131);    // the fix IP address of the server
 WiFiClient client;                  //
 // Set web server port number to 80
@@ -31,7 +40,7 @@ HTTPClient http;
 
 
 void setup() {
-  Serial.begin(500000);               // only for debug
+  Serial.begin(4800);               // only for debug
   WiFi.begin(ssid, pass);             // connects to the WiFi router
   IPAddress ip(192, 168, 0, 51);
   IPAddress dns(192, 168, 00, 1);
@@ -72,19 +81,19 @@ void loop ()
   delay(10);
   clientIP_esp8266 ();
   ModbusInOut ();
-
+  bucketenergy ();
 }
 //****************Fin Loop ****************************************
 //*****************************Fonctions*****************************
 void bits ()
 {
 
-  bit4 = (conso2 / 256);
+  bit4 = (conso / 256);
   if ((bit4 < 0) or (bit4 > 256))
   {
     bit4 = (0);
   }
-  bit5 = (conso2) - (bit4 * 256);
+  bit5 = (conso) - (bit4 * 256);
   if ((bit5 < 0) or (bit5 > 256))
   {
     bit5 = (0);
@@ -99,7 +108,7 @@ void bits ()
 //************************************************************************************
 void ModbusInOut () 
 {
-  conso2 = bucket.toInt() * 0.5 ; //0.45  ;
+  conso = energyInBucket.toInt() * 0.5 ; //0.45= 450W , 0.5 = 500W coefficient de limitation,  a ajuster selon l'onduleur
   bits ();
   byte ReadCommand[] = { 0x24, 0x56 , 0x00 , 0x21 , bit4 , bit5 , 0x80 , bit7};
   digitalWrite(RE , HIGH);
@@ -131,8 +140,65 @@ void clientIP_esp8266 ()
     }
   }
  
-  bucket = tab [5];
+  Bucket = tab [5];
   client.flush();
-  Serial.print ("Mesures:");
-  Serial.println (Mesures);
+ // Serial.print ("Mesures:");
+ // Serial.println (Mesures);
 }
+//************************************************************************************************
+void bucketenergy ()
+{
+  realEnergy = Bucket.toInt() /(cyclesPerSecond);
+  energyInBucket += realEnergy;  // intégrateur pour régulation
+
+  // Reduction d'énergie dans le reservoir d'une quantité "safety margin"
+  // Ceci permet au système un décalage pour plus d'injection ou + de soutirage
+  energyInBucket -= residuel / (cyclesPerSecond)  ;
+
+  // Limites dans la fourchette 1 à +1500 joules ;ne peut être négatif ni nul.
+  if (energyInBucket > capacityOfEnergyBucket)
+  {
+    energyInBucket = capacityOfEnergyBucket;
+  }
+
+  if (energyInBucket <= 0)
+  {
+    energyInBucket = 0 ;
+  }
+  else
+
+    // Après un reset attendre 100 périodes (2 secondes) le temps que la composante continue soit éliminée par le filtre
+
+    //  if(cycleCount > 100) // deux secondes
+    //     beyondStartUpPhase = true;
+    //*******************************************
+    if (energyInBucket <= 1000)
+    {
+      firingDelayInMicros =  2000;//99999;
+    }
+    else
+      // fire immediately if energy level is above upper threshold (full power)
+      if (energyInBucket >= 1000)
+      {
+        firingDelayInMicros = 0;
+      }
+      else      
+        // détermine le point  approprié pour le niveau du Bucket
+           // en utilisant l'un des algorithmes suivants
+        {
+         //********** algorithme simple (avec réponse en puissance non linéaire sur toute la plage d'énergie)**********
+          //        firingDelayInMicros = 10 * (2300 - energyInBucket);
+          
+          //*********** algorithme complexe qui reflète la nature non linéaire du contrôle d'angle de phase.***********
+          firingDelayInMicros = (asin((-1 * (energyInBucket - 500) / 500)) + (PI / 2)) * (10000 / PI);
+         //***********************************************************************************************************
+          
+          // Supprimer le point à des niveaux d'énergie faibles pour éviter les complications avec
+           // logique vers la fin de chaque demi-cycle du secteur.
+           // Cette coupure affecte approximativement les 5 % inférieurs de la plage d'énergie.
+          if (firingDelayInMicros > 5000) {
+            firingDelayInMicros = 1000; 
+          }
+        }
+}
+//**********************************************
